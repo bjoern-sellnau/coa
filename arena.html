@@ -300,6 +300,18 @@
     border:1px solid rgba(0,229,255,.15);padding:7px 11px;margin-bottom:5px;}
   .cz-n{flex:1;font-family:'Share Tech Mono',monospace;font-size:13px;color:#dff;}
   .cz-tag{font-size:10px;letter-spacing:1px;color:#7891a5;text-transform:uppercase;}
+  .rl-editor{background:rgba(12,22,36,.7);border:1px solid rgba(0,229,255,.25);
+    border-left:3px solid var(--nc);padding:12px;margin:6px 0 10px;}
+  .rl-erow{display:flex;align-items:center;gap:10px;margin-bottom:6px;}
+  .rl-erow span{min-width:110px;font-size:12px;color:#9fb4c6;}
+  .rl-erow input{background:#0f2032;border:1px solid rgba(0,229,255,.25);color:#cfe0ec;
+    font-family:'Share Tech Mono',monospace;font-size:12px;padding:4px 8px;}
+  .rl-erow input[type=number]{width:80px;}
+  .rl-wrow{display:flex;align-items:center;gap:12px;margin:3px 0;font-size:12px;color:#cfe0ec;}
+  .rl-allow{display:flex;align-items:center;gap:6px;min-width:150px;}
+  .rl-unl{color:#7891a5;display:flex;align-items:center;gap:5px;}
+  .rl-unl input{width:60px;background:#0f2032;border:1px solid rgba(0,229,255,.2);color:#cfe0ec;
+    font-family:'Share Tech Mono',monospace;font-size:12px;padding:2px 4px;}
   .hl-list{display:flex;flex-direction:column;gap:5px;margin-bottom:6px;}
   .hl-row{display:flex;gap:14px;background:rgba(12,22,36,.5);border-left:3px solid rgba(0,229,255,.3);padding:7px 12px;}
   .hl-n{font-family:'Orbitron',sans-serif;font-size:13px;color:#fff;width:160px;flex-shrink:0;letter-spacing:1px;}
@@ -651,7 +663,7 @@
     <input id="lvlName_legacy" value="ARENA Standard">
   </div>
 
-  <div id="buildtag">COA pre-alpha | build 0.50</div>
+  <div id="buildtag">COA pre-alpha | build 0.51</div>
 </div>
 
 <!-- ===== Untermenü-Screens (werden in den nächsten Etappen gefüllt) ===== -->
@@ -1372,6 +1384,28 @@ let curWeap='pistol';
 let fireCD=0;
 let akimbo=false;          // Uzi-Akimbo aktiv (Toggle mit Shift)
 
+// ---------- Rules-System ----------
+// Ein Regelsatz definiert Start-Health/Armor und je Waffe: erlaubt + Freischalt-Frags.
+const RULE_WEAPONS=['uzi','sg','mg','flak','plasma','rl','rg'];
+function defaultRules(){
+  const weapons={};RULE_WEAPONS.forEach(w=>weapons[w]={allow:true,unlock:0});
+  return {name:'Standard',startHealth:100,startArmor:0,weapons};
+}
+const RULESETS=[{name:'Standard',builtin:true,data:defaultRules()}];
+let currentRules=defaultRules();
+let selectedRulesIndex=0;
+function ruleFor(w){return currentRules&&currentRules.weapons&&currentRules.weapons[w];}
+function weaponAllowed(w){const r=ruleFor(w);return !r||r.allow!==false;}
+function weaponUnlock(w){const r=ruleFor(w);return r?(r.unlock||0):0;}
+function weaponUnlocked(w){return (player.frags||0)>=weaponUnlock(w);}
+function applyRulesToPickups(){
+  if(isInstagib())return;   // Instagib filtert Pickups bereits selbst
+  pickups.forEach(p=>{
+    const wk=RULE_WEAPONS.includes(p.type)?p.type:(p.type==='ammo'?p.weapon:null);
+    if(wk&&!weaponAllowed(wk)){p.active=false;p.group.visible=false;p.cd=1e9;}
+  });
+}
+
 // Waffen-Viewmodel (einfaches Modell unten rechts an der Kamera)
 const weaponGroup=new THREE.Group();camera.add(weaponGroup);scene.add(camera);
 const gunMat=new THREE.MeshStandardMaterial({color:0x222a33,metalness:0.7,roughness:0.4});
@@ -2088,7 +2122,7 @@ function doRespawn(){
 function respawnPlayer(){
   const p=spawnPoint();
   player.pos.set(p.x,EYE,p.z);player.vel.set(0,0,0);
-  player.health=MAX_HEALTH;player.armor=0;
+  player.health=currentRules.startHealth||MAX_HEALTH;player.armor=currentRules.startArmor||0;
   player.quadT=0;player.berserkT=0;player.overloadT=0;
   if(isInstagib()){
     // Instagib: nur die Railgun, unendlich Munition
@@ -3293,17 +3327,25 @@ function updatePickups(dt){
         blip(120,0.4,'sawtooth',0.2);blip(480,0.4,'sine',0.15);
       }else{ // normale Waffe
         const w=p.weapon;const def=WEAPONS[w];
-        const before=owned[w];
-        owned[w]=true;
-        def.ammo=Math.min(def.maxAmmo,def.ammo+def.pickup);
-        taken=true;
-        // Nur wechseln, wenn Auto-Swap an ist UND die neue Waffe in der Swap-Liste
-        // höher (besser) steht als die aktuelle. Erste Waffe immer nehmen.
-        const better=(swapRank(w)<swapRank(curWeap));
-        if(!owned[curWeap]||(autoSwapPickup&&before===false&&better))switchWeapon(w);
-        else updateAmmo();
-        updateTournamentBar();
-        killfeed(`<span class="you">+</span> ${def.name}`);
+        if(!weaponUnlocked(w)){
+          // Waffe noch gesperrt (Regelsatz) – Pickup bleibt liegen, Hinweis mit Cooldown
+          if(!p._lockMsgT||performance.now()>p._lockMsgT){
+            killfeed(`<span class="dim">🔒 ${def.name} ab ${weaponUnlock(w)} Frags</span>`);
+            p._lockMsgT=performance.now()+2500;
+          }
+        }else{
+          const before=owned[w];
+          owned[w]=true;
+          def.ammo=Math.min(def.maxAmmo,def.ammo+def.pickup);
+          taken=true;
+          // Nur wechseln, wenn Auto-Swap an ist UND die neue Waffe in der Swap-Liste
+          // höher (besser) steht als die aktuelle. Erste Waffe immer nehmen.
+          const better=(swapRank(w)<swapRank(curWeap));
+          if(!owned[curWeap]||(autoSwapPickup&&before===false&&better))switchWeapon(w);
+          else updateAmmo();
+          updateTournamentBar();
+          killfeed(`<span class="you">+</span> ${def.name}`);
+        }
       }
       if(taken){
         p.active=false;p.group.visible=false;
@@ -3670,6 +3712,7 @@ function resetGame(){
   }else{
     pickups.forEach(p=>{p.active=true;p.group.visible=true;p.cd=0;});
   }
+  applyRulesToPickups();         // nicht erlaubte Waffen-/Munitions-Pickups ausblenden
   const mission=scriptActive();
   applyBotCount(mission?0:botCount);   // in einer Mission spawnt das Skript die Gegner
   bots.forEach(b=>{b.frags=0;b.deaths=0;});
@@ -3870,7 +3913,8 @@ function wizOpts(){
 }
 function wizMut(){
   return optGroupHtml('hud','HUD-Typ',[['classic','Classic'],['tournament','Tournament'],['arena','Arena']],hudType)
-    +`<div class="wz-hint">Mutatoren verändern die Regeln. Aktuell: HUD-Darstellung. Weitere folgen.</div>`;
+    +optGroupHtml('rules','Regelsatz',RULESETS.map((r,i)=>[i,r.name]),selectedRulesIndex)
+    +`<div class="wz-hint">Regelsatz legt Start-Health/Armor und Waffen-Freischaltung fest – eigene unter „Customize“. HUD-Darstellung wählbar.</div>`;
 }
 function wizMap(){
   return `<div class="wz-list">${MAPS.map((m,i)=>
@@ -3919,6 +3963,7 @@ function applyOptGroup(id,v){
   else if(id==='team')teamShare=parseInt(v,10);
   else if(id==='diff')difficulty=v;
   else if(id==='hud'){hudType=v;applyHudType();}
+  else if(id==='rules'){selectedRulesIndex=parseInt(v,10);currentRules=clone((RULESETS[selectedRulesIndex]||RULESETS[0]).data);}
   else if(id==='frag'){
     const n=parseInt(v,10);
     if(wiz.mode==='ctf')OBJ_GOAL=n;
@@ -3937,6 +3982,7 @@ function wizCommitStep(){
 }
 function wizStart(){
   testFromEditor=false;
+  currentRules=clone((RULESETS[selectedRulesIndex]||RULESETS[0]).data);  // gewählten Regelsatz anwenden
   if(wiz.isMission){
     currentLevel=clone(MISSIONS[wiz.missionIndex].data);
   }else{
@@ -4017,6 +4063,23 @@ addEventListener('keydown',e=>{
 },true);
 
 // ================= CUSTOMIZE-SCREEN =================
+let rulesEditIndex=-1;     // welcher Regelsatz gerade bearbeitet wird (-1 = keiner)
+function rulesEditorHtml(R){
+  const wr=RULE_WEAPONS.map(w=>{
+    const r=R.weapons[w]||{allow:true,unlock:0};
+    return `<div class="rl-wrow">
+      <label class="rl-allow"><input type="checkbox" data-rw="${w}" ${r.allow!==false?'checked':''}> ${WEAPONS[w].name}</label>
+      <span class="rl-unl">frei ab <input type="number" min="0" step="1" data-ru="${w}" value="${r.unlock||0}"> Frags</span>
+    </div>`;}).join('');
+  return `<div class="rl-editor">
+    <div class="rl-erow"><span>Name</span><input type="text" id="rl-name" value="${R.name}" ${R._builtin?'disabled':''}></div>
+    <div class="rl-erow"><span>Start-Health</span><input type="number" min="1" step="1" id="rl-hp" value="${R.startHealth}"></div>
+    <div class="rl-erow"><span>Start-Armor</span><input type="number" min="0" step="1" id="rl-ar" value="${R.startArmor}"></div>
+    <div class="opt-h" style="margin-top:6px;">Waffen (erlaubt &amp; Freischaltung)</div>
+    ${wr}
+    <button class="btn" id="rl-done" style="margin-top:8px;">Fertig</button>
+  </div>`;
+}
 buildCustomizeScreen=function(){
   const host=document.getElementById('customizeBody');
   const mapRows=MAPS.map((m,i)=>
@@ -4027,6 +4090,14 @@ buildCustomizeScreen=function(){
     `<div class="cz-item"><span class="cz-n">${m.name}</span>
       <span class="cz-tag">${m.builtin?'eingebaut':'importiert'}</span>
       ${m.builtin?'':`<button class="edbtn small cz-del" data-lib="missions" data-i="${i}">✕</button>`}</div>`).join('');
+  const ruleRows=RULESETS.map((r,i)=>
+    `<div class="cz-item"><span class="cz-n">${r.name}</span>
+      <span class="cz-tag">${r.builtin?'eingebaut':'eigen'}</span>
+      ${r.builtin?'':`<button class="edbtn small rl-edit" data-i="${i}">✎</button>`}
+      <button class="edbtn small rl-exp" data-i="${i}">⭳</button>
+      ${r.builtin?'':`<button class="edbtn small rl-del" data-i="${i}">✕</button>`}</div>`).join('');
+  const editorBlock=(rulesEditIndex>=0&&RULESETS[rulesEditIndex]&&!RULESETS[rulesEditIndex].builtin)
+    ? rulesEditorHtml(RULESETS[rulesEditIndex].data) : '';
   host.innerHTML=`
     <h2>CUSTOMIZE</h2>
     <div class="screenbody">Importiere Level als <b>.json</b> (im CrystalED gespeichert). Levels <b>mit Triggern</b> erscheinen unter Missions, ohne Trigger unter Match.</div>
@@ -4035,6 +4106,14 @@ buildCustomizeScreen=function(){
       <div class="opt-col"><div class="opt-h">Maps (Match)</div>${mapRows}</div>
       <div class="opt-col"><div class="opt-h">Missionen</div>${misRows}</div>
     </div>
+    <div class="opt-h" style="margin-top:14px;">Regelsätze</div>
+    <div class="screenbody">Start-Health/Armor, erlaubte Waffen und ab wie vielen Frags eine Waffe verfügbar ist. Im Match unter „Mutators“ wählbar.</div>
+    <div style="display:flex;gap:8px;margin-bottom:6px;">
+      <button class="btn btn2" id="rl-new">+ Neuer Regelsatz</button>
+      <button class="btn btn2" id="rl-import">⭱ Regelsatz importieren</button>
+    </div>
+    ${ruleRows}
+    ${editorBlock}
     <button class="btn btn2 backbtn">Zurück</button>`;
   host.querySelector('.backbtn').onclick=backToMenu;
   const fileIn=document.getElementById('customize-file');
@@ -4047,7 +4126,7 @@ buildCustomizeScreen=function(){
         if(!L.boxes&&!L.ramps&&!L.pickups)throw new Error('kein Level');
         L.boxes=L.boxes||[];L.ramps=L.ramps||[];L.gates=L.gates||[];
         L.pickups=L.pickups||[];L.spawns=L.spawns||[];L.zones=L.zones||[];
-        L.triggers=L.triggers||[];L.ui=L.ui||[];
+        L.triggers=L.triggers||[];L.ui=L.ui||[];L.cams=L.cams||[];
         const r=registerLevel(L);
         blip(660,0.1,'sine',0.14);
         buildCustomizeScreen();
@@ -4062,7 +4141,70 @@ buildCustomizeScreen=function(){
     if(b.dataset.lib==='maps'&&selectedMapIndex>=MAPS.length)selectedMapIndex=0;
     buildCustomizeScreen();
   });
+  // ---- Regelsätze ----
+  host.querySelector('#rl-new').onclick=()=>{
+    const base=clone((RULESETS[selectedRulesIndex]||RULESETS[0]).data);
+    let n='Regelsatz '+(RULESETS.length),k=1; while(RULESETS.some(r=>r.name===n)){n='Regelsatz '+(RULESETS.length+(k++));}
+    base.name=n;
+    RULESETS.push({name:n,builtin:false,data:base});
+    rulesEditIndex=RULESETS.length-1;
+    buildCustomizeScreen();
+  };
+  host.querySelector('#rl-import').onclick=()=>importRulesFile();
+  host.querySelectorAll('.rl-edit').forEach(b=>b.onclick=()=>{rulesEditIndex=+b.dataset.i;buildCustomizeScreen();});
+  host.querySelectorAll('.rl-exp').forEach(b=>b.onclick=()=>exportRules(RULESETS[+b.dataset.i]));
+  host.querySelectorAll('.rl-del').forEach(b=>b.onclick=()=>{
+    const i=+b.dataset.i; RULESETS.splice(i,1);
+    if(selectedRulesIndex>=RULESETS.length)selectedRulesIndex=0;
+    if(rulesEditIndex===i)rulesEditIndex=-1; else if(rulesEditIndex>i)rulesEditIndex--;
+    buildCustomizeScreen();
+  });
+  // Editor-Felder live an die Daten binden
+  if(rulesEditIndex>=0&&RULESETS[rulesEditIndex]&&!RULESETS[rulesEditIndex].builtin){
+    const R=RULESETS[rulesEditIndex].data, entry=RULESETS[rulesEditIndex];
+    const nameInp=host.querySelector('#rl-name');
+    if(nameInp)nameInp.onchange=()=>{R.name=nameInp.value.trim()||R.name;entry.name=R.name;buildCustomizeScreen();};
+    const hp=host.querySelector('#rl-hp'),ar=host.querySelector('#rl-ar');
+    hp.onchange=()=>{R.startHealth=Math.max(1,parseInt(hp.value,10)||100);};
+    ar.onchange=()=>{R.startArmor=Math.max(0,parseInt(ar.value,10)||0);};
+    host.querySelectorAll('[data-rw]').forEach(cb=>cb.onchange=()=>{
+      const w=cb.dataset.rw;(R.weapons[w]||(R.weapons[w]={})).allow=cb.checked;});
+    host.querySelectorAll('[data-ru]').forEach(inp=>inp.onchange=()=>{
+      const w=inp.dataset.ru;(R.weapons[w]||(R.weapons[w]={})).unlock=Math.max(0,parseInt(inp.value,10)||0);});
+    const done=host.querySelector('#rl-done');
+    if(done)done.onclick=()=>{rulesEditIndex=-1;buildCustomizeScreen();};
+  }
 };
+// Regelsatz als Datei exportieren / importieren
+function exportRules(entry){
+  if(!entry)return;
+  const out={format:'coa-rules',version:1,name:entry.name,data:entry.data};
+  const blob=new Blob([JSON.stringify(out,null,1)],{type:'application/json'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+  a.download=(entry.name||'rules').replace(/[^\w-]+/g,'_')+'.coarules.json';
+  document.body.appendChild(a);a.click();a.remove();
+  setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+}
+function importRulesFile(){
+  const inp=document.createElement('input');inp.type='file';inp.accept='application/json,.json';
+  inp.onchange=e=>{const f=e.target.files[0];if(!f)return;
+    const fr=new FileReader();
+    fr.onload=()=>{
+      try{
+        const j=JSON.parse(fr.result);
+        const d=(j&&j.data&&j.data.weapons)?j.data:j;
+        if(!d||!d.weapons||typeof d.startHealth!=='number')throw new Error('kein Regelsatz');
+        // fehlende Waffen ergänzen
+        RULE_WEAPONS.forEach(w=>{d.weapons[w]=d.weapons[w]||{allow:true,unlock:0};});
+        d.name=(j&&j.name)||d.name||f.name.replace(/\.(coarules\.)?json$/i,'')||'Regelsatz';
+        RULESETS.push({name:d.name,builtin:false,data:d});
+        blip(660,0.1,'sine',0.14);buildCustomizeScreen();
+      }catch(err){alert('Ungültige Regelsatz-Datei: '+err.message);}
+    };
+    fr.readAsText(f);
+  };
+  inp.click();
+}
 
 // ================= HILFE-SCREEN =================
 const HELP_WEAPONS=[
