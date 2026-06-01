@@ -457,6 +457,38 @@
   #blueprint{position:fixed;inset:0;z-index:13;background:#070d15;
     font-family:'Share Tech Mono',monospace;}
   #blueprint.hidden{display:none;}
+  /* Cinematics-Editor */
+  #cinematics{position:fixed;inset:0;z-index:13;background:#070d15;font-family:'Share Tech Mono',monospace;}
+  #cinematics.hidden{display:none;}
+  #cine-left{position:fixed;top:46px;left:0;bottom:0;width:300px;overflow-y:auto;z-index:2;
+    background:rgba(8,14,22,.96);border-right:1px solid rgba(0,229,255,.2);padding:12px;}
+  #cine-view{position:fixed;top:46px;left:300px;right:0;bottom:0;
+    background:radial-gradient(circle,rgba(255,255,255,.04) 1px,transparent 1px) 0 0/22px 22px,#0a121d;
+    display:flex;align-items:center;justify-content:center;}
+  .cine-viewhint{color:#5d748a;font-size:13px;max-width:420px;text-align:center;line-height:1.6;}
+  #cine-sel{background:#0f2032;border:1px solid rgba(0,229,255,.3);color:#cfe0ec;
+    font-family:'Share Tech Mono',monospace;font-size:12px;padding:2px 6px;}
+  .cine-namerow{display:flex;gap:6px;margin:6px 0 4px;}
+  #cine-name{flex:1;background:#0f2032;border:1px solid rgba(0,229,255,.25);color:#cfe0ec;
+    font-family:'Share Tech Mono',monospace;font-size:12px;padding:4px 8px;}
+  .cine-k{border:1px solid rgba(0,229,255,.18);border-left:3px solid var(--nc);
+    background:#0c1726;margin-bottom:8px;padding:7px 8px;}
+  .cine-krow{display:flex;align-items:center;gap:4px;flex-wrap:wrap;margin:3px 0;font-size:11px;color:#9fb4c6;}
+  .cine-krow label{display:flex;align-items:center;gap:3px;}
+  .cine-krow input[type=number]{width:46px;background:#0f2032;border:1px solid rgba(0,229,255,.2);
+    color:#cfe0ec;font-family:'Share Tech Mono',monospace;font-size:11px;padding:2px 3px;}
+  .cine-kl{font-family:'Orbitron',sans-serif;color:#00e5ff;font-size:12px;min-width:24px;}
+  .cine-kt{min-width:30px;color:#7891a5;}
+  /* Letterbox-Balken während einer Kamerafahrt */
+  #cinebars{position:fixed;inset:0;z-index:8;pointer-events:none;}
+  #cinebars .cb-top,#cinebars .cb-bot{position:absolute;left:0;right:0;height:0;background:#000;
+    transition:height .5s ease;}
+  #cinebars .cb-top{top:0;} #cinebars .cb-bot{bottom:0;}
+  #cinebars.on .cb-top,#cinebars.on .cb-bot{height:9vh;}
+  #cine-pickhint{position:fixed;top:60px;left:50%;transform:translateX(-50%);z-index:14;
+    background:rgba(8,14,22,.95);border:1px solid var(--nc);color:#cfe0ec;
+    font-family:'Share Tech Mono',monospace;font-size:13px;padding:8px 16px;border-radius:3px;}
+  #cine-pickhint.hidden{display:none;}
   #bp-top{position:fixed;top:0;left:0;right:0;height:46px;display:flex;align-items:center;gap:12px;
     padding:0 14px;background:rgba(8,14,22,.95);border-bottom:1px solid rgba(0,229,255,.25);z-index:3;}
   .bp-hint{color:#5d748a;font-size:12px;}
@@ -619,7 +651,7 @@
     <input id="lvlName_legacy" value="ARENA Standard">
   </div>
 
-  <div id="buildtag">COA pre-alpha | build 0.49</div>
+  <div id="buildtag">COA pre-alpha | build 0.50</div>
 </div>
 
 <!-- ===== Untermenü-Screens (werden in den nächsten Etappen gefüllt) ===== -->
@@ -666,6 +698,7 @@
     <button class="edbtn" id="ed-reset">↺ Standard</button>
     <button class="edbtn" id="ed-clear">🗑 Leeren</button>
     <button class="edbtn" id="ed-tut">❔ Tutorials</button>
+    <button class="edbtn" id="ed-cine">🎬 Cinematics</button>
     <button class="edbtn" id="ed-bp">🔗 Blueprint</button>
     <button class="edbtn" id="ed-back">✕ Menü</button>
     <input type="file" id="ed-file" accept="application/json" style="display:none">
@@ -742,6 +775,40 @@
 </div>
 
 <!-- ===== Blueprint-Node-Editor (Phase C) ===== -->
+<div id="cinebars"><div class="cb-top"></div><div class="cb-bot"></div></div>
+<div id="cinematics" class="hidden">
+  <div id="bp-top">
+    <span class="ed-brand">CINEMATICS</span>
+    <span class="bp-hint">Keyframes = Kamerapositionen + Blickziel. „Pos hier“/„Ziel hier“ setzt den Punkt per Klick auf die Karte · ▶ Vorschau im Editor</span>
+    <div style="flex:1"></div>
+    <button class="edbtn" id="cine-play">▶ Vorschau</button>
+    <button class="edbtn" id="cine-close">✕ Schließen</button>
+  </div>
+  <div id="cine-left">
+    <div class="ed-h">Cinematic
+      <select id="cine-sel"></select>
+      <button class="edbtn small" id="cine-new">+ Neu</button>
+    </div>
+    <div class="cine-namerow">
+      <input id="cine-name" spellcheck="false" placeholder="Name">
+      <button class="edbtn small" id="cine-del">Löschen</button>
+    </div>
+    <div class="ed-h">Keyframes
+      <button class="edbtn small" id="cine-addcam">+ von Kamera</button>
+      <button class="edbtn small" id="cine-add">+ Keyframe</button>
+    </div>
+    <div id="cine-keys"></div>
+    <div class="ed-help" style="margin-top:12px;">
+      <b>So geht’s:</b> Keyframes anlegen, je Keyframe Kameraposition (x/y/z) und
+      Blickziel (zx/zy/zz) setzen, <b>Dauer</b> = Sekunden vom vorherigen Keyframe.
+      Mit <b>playCinematic</b> in den Triggern/Blueprint abspielbar.
+    </div>
+  </div>
+  <div id="cine-view">
+    <div class="cine-viewhint">Top-Down-Vorschau · Kameras als Punkte, Linie = Blickrichtung</div>
+  </div>
+</div>
+<div id="cine-pickhint" class="hidden">Klicke auf die Karte, um den Punkt zu setzen &nbsp;·&nbsp; ESC bricht ab</div>
 <div id="blueprint" class="hidden">
   <div id="bp-top">
     <span class="ed-brand">BLUEPRINT</span>
@@ -1558,6 +1625,7 @@ function runAction(t,data){
     case 'setObjective': setObjectiveText(t.ui||'obj',t.text||''); break;
     case 'endMatch': endGame(!!t.win); break;
     case 'openDoor': openAllDoors(); break;
+    case 'playCinematic': playCinematic(t.cam); break;
   }
 }
 // Gegnerwelle spawnen (optional in einer Zone)
@@ -2187,6 +2255,14 @@ const DEFAULT_LEVEL={
   zones:[],      // Trigger-Volumen {x,z,w,d,h,name}
   triggers:[],   // Regeln {event,...,cond,...,action,...,once}
   ui:[],         // HUD-Widgets {id,type,anchor,text,bind,color}
+  cams:[         // Cinematics {name,keys:[{x,y,z,tx,ty,tz,dur}]}
+    {name:'flyby', keys:[
+      {x:-60,y:24,z:-60, tx:0,ty:2,tz:0, dur:0},
+      {x:0,y:34,z:-70,   tx:0,ty:2,tz:0, dur:3.5},
+      {x:60,y:24,z:0,    tx:0,ty:2,tz:0, dur:3.5},
+      {x:0,y:14,z:55,    tx:0,ty:4,tz:0, dur:3.5}
+    ]}
+  ],
 };
 
 // Beispiel-Mission „Verteidige die Basis" als Vorlage (separat ladbar)
@@ -4180,6 +4256,7 @@ function editorGround(ev){
 }
 // Klick im Editor: bestehendes Element wählen oder neues platzieren
 function editorClick(ev){
+  if(cineEd&&cineEd.pick){const gp=editorGround(ev);if(gp)cineCommitPick(gp);return;}
   const ndc=new THREE.Vector2((ev.clientX/innerWidth)*2-1, -(ev.clientY/innerHeight)*2+1);
   raycaster.setFromCamera(ndc,camera);
   const hits=raycaster.intersectObjects(levelObjects,true);
@@ -4273,7 +4350,7 @@ const TRG_EVENTS=[['matchStart','Spielstart'],['kill','Kill (Spieler)'],['score'
   ['enterZone','Zone betreten'],['exitZone','Zone verlassen'],['timer','Timer (Sek.)']];
 const TRG_ACTIONS=[['setVar','Variable setzen'],['addVar','Variable +'],['spawnBots','Gegner spawnen'],
   ['giveWeapon','Waffe geben'],['showBanner','Banner zeigen'],['setObjective','Ziel-Text setzen'],
-  ['openDoor','Türen öffnen'],['endMatch','Match beenden']];
+  ['openDoor','Türen öffnen'],['playCinematic','Cinematic abspielen'],['endMatch','Match beenden']];
 const TRG_OPS=['==','!=','>','<','>=','<='];
 function selHtml(k,opts,val){
   return `<select data-tk="${k}">`+opts.map(o=>{
@@ -4301,6 +4378,7 @@ function refreshTriggerList(){
     else if(t.action==='showBanner')acExtra=txtHtml('text',t.text,'Text');
     else if(t.action==='setObjective')acExtra=selHtml('ui',uiIds.length?uiIds:[''],t.ui||'')+txtHtml('text',t.text,'Ziel-Text');
     else if(t.action==='endMatch')acExtra=selHtml('win',[['true','Sieg'],['false','Niederlage']],String(!!t.win));
+    else if(t.action==='playCinematic'){const cn=(currentLevel.cams||[]).map(c=>c.name);acExtra=selHtml('cam',cn.length?cn:[''],t.cam||'');}
     return `<div class="trg" data-i="${i}">
       <div class="trg-row"><span class="trg-lbl">WENN</span>${selHtml('event',TRG_EVENTS,t.event)}${evExtra}</div>
       <div class="trg-row"><span class="trg-lbl">UND var</span>${txtHtml('cond',t.cond,'(optional)')}${selHtml('op',TRG_OPS,t.op||'==')}${numHtml('cval',t.cval)}</div>
@@ -4356,6 +4434,9 @@ function enterEditor(){
   zoneVols.forEach(z=>z.mesh.visible=true);
   bots.forEach(b=>b.group.visible=false);   // Bots im Editor ausblenden
   editState.selected=null;editState.selKind=null;
+  cineEd.cam=null;cineEd.pick=null;
+  document.getElementById('cinematics').classList.add('hidden');
+  document.getElementById('cine-pickhint').classList.add('hidden');
   refreshInspector();showSelection();refreshTriggerList();
 }
 function exitEditor(){
@@ -4363,6 +4444,9 @@ function exitEditor(){
   document.body.classList.remove('editing');
   spawnMarkers.forEach(m=>m.visible=false);
   document.getElementById('editor').classList.remove('active');
+  document.getElementById('cinematics').classList.add('hidden');
+  document.getElementById('cine-pickhint').classList.add('hidden');
+  cineEd.pick=null;
 }
 
 // ================= BLUEPRINT-EDITOR (Phase C1) =================
@@ -4378,7 +4462,7 @@ const BP_NODES={
   action:[
     ['setVar','Variable setzen'],['addVar','Variable +'],['spawnBots','Gegner spawnen'],
     ['giveWeapon','Waffe geben'],['showBanner','Banner zeigen'],['setObjective','Ziel-Text'],
-    ['openDoor','Türen öffnen'],['endMatch','Match beenden']
+    ['openDoor','Türen öffnen'],['playCinematic','Cinematic'],['endMatch','Match beenden']
   ],
 };
 const BP_LABEL={};Object.values(BP_NODES).forEach(arr=>arr.forEach(p=>BP_LABEL[p[0]]=p[1]));
@@ -4400,6 +4484,7 @@ const BP_PARAMS={
   showBanner:[['text','Text','text']],
   setObjective:[['ui','UI-Ziel','ui'],['text','Text','text']],
   openDoor:[],
+  playCinematic:[['cam','Cinematic','cam']],
   endMatch:[['win','Ausgang','sel',['Sieg','Niederlage']]],
 };
 function bpFieldHtml(n,p){
@@ -4413,6 +4498,9 @@ function bpFieldHtml(n,p){
   }else if(t==='ui'){
     const us=['obj',...(currentLevel&&currentLevel.ui||[]).map(u=>u.id)];
     inner=`<select data-pk="${key}">`+[...new Set(us)].map(o=>`<option ${String(val||'')===String(o)?'selected':''}>${o}</option>`).join('')+`</select>`;
+  }else if(t==='cam'){
+    const cs=['',...(currentLevel&&currentLevel.cams||[]).map(c=>c.name)];
+    inner=`<select data-pk="${key}">`+cs.map(o=>`<option value="${o}" ${String(val||'')===String(o)?'selected':''}>${o||'(keine)'}</option>`).join('')+`</select>`;
   }else if(t==='num'){
     inner=`<input type="number" data-pk="${key}" value="${val??''}">`;
   }else{
@@ -4533,6 +4621,7 @@ function makeTrigger(ev,cond,act){
     case 'giveWeapon': t.weapon=P.weapon||'mg'; break;
     case 'showBanner': t.text=P.text||''; break;
     case 'setObjective': t.ui=P.ui||'obj'; t.text=P.text||''; break;
+    case 'playCinematic': t.cam=P.cam||''; break;
     case 'endMatch': t.win=(P.win!=='Niederlage'); break;
   }
   return t;
@@ -4576,6 +4665,7 @@ function actionParams(t){
     case 'giveWeapon': return {weapon:t.weapon};
     case 'showBanner': return {text:t.text};
     case 'setObjective': return {ui:t.ui,text:t.text};
+    case 'playCinematic': return {cam:t.cam};
     case 'endMatch': return {win:t.win?'Sieg':'Niederlage'};
     default: return {};
   }
@@ -4715,6 +4805,11 @@ function renderEdges(){
     }
     if(ev.code==='Escape'){closeBlueprint();}
   });
+  addEventListener('keydown',ev=>{
+    if(ev.code!=='Escape')return;
+    if(cineEd.pick){cineCancelPick();document.getElementById('cinematics').classList.remove('hidden');ev.preventDefault();return;}
+    if(!document.getElementById('cinematics').classList.contains('hidden')){closeCinematics();ev.preventDefault();}
+  });
 })();
 function editorTest(){           // Standalone (Vollbild) wie bisher
   testFromEditor=true;windowedTest=false;
@@ -4764,7 +4859,7 @@ function loadLevelFromText(txt){
     L.version=L.version||1;L.name=L.name||'Importiert';
     L.boxes=L.boxes||[];L.ramps=L.ramps||[];L.gates=L.gates||[];
     L.pickups=L.pickups||[];L.spawns=L.spawns||[];
-    L.zones=L.zones||[];L.triggers=L.triggers||[];L.ui=L.ui||[];
+    L.zones=L.zones||[];L.triggers=L.triggers||[];L.ui=L.ui||[];L.cams=L.cams||[];
     currentLevel=L;
     document.getElementById('lvlName').value=L.name;
     if(editing)rebuildEditor();else buildLevel(currentLevel);
@@ -4836,7 +4931,7 @@ addEventListener('keydown',ev=>{
   document.getElementById('ed-save').onclick=saveLevel;
   document.getElementById('ed-clear').onclick=()=>{
     if(!confirm('Level leeren?'))return;
-    currentLevel={version:1,name:currentLevel.name,boxes:[],ramps:[],gates:[],pickups:[],spawns:[],zones:[],triggers:[],ui:[]};
+    currentLevel={version:1,name:currentLevel.name,boxes:[],ramps:[],gates:[],pickups:[],spawns:[],zones:[],triggers:[],ui:[],cams:[]};
     editState.selected=null;rebuildEditor();
   };
   document.getElementById('ed-reset').onclick=()=>{currentLevel=clone(DEFAULT_LEVEL);editState.selected=null;document.getElementById('lvlName').value=currentLevel.name;rebuildEditor();};
@@ -4857,6 +4952,15 @@ addEventListener('keydown',ev=>{
   document.getElementById('ed-back').onclick=()=>{exitEditor();document.getElementById('menu').classList.remove('hidden');};
   document.getElementById('ed-tut').onclick=()=>document.getElementById('tutorials').classList.remove('hidden');
   document.getElementById('tut-close').onclick=()=>document.getElementById('tutorials').classList.add('hidden');
+  document.getElementById('ed-cine').onclick=openCinematics;
+  document.getElementById('cine-close').onclick=closeCinematics;
+  document.getElementById('cine-play').onclick=cinePreview;
+  document.getElementById('cine-new').onclick=cineNew;
+  document.getElementById('cine-del').onclick=cineDelete;
+  document.getElementById('cine-add').onclick=()=>cineAddKey(false);
+  document.getElementById('cine-addcam').onclick=()=>cineAddKey(true);
+  document.getElementById('cine-sel').onchange=e=>cineSelectByName(e.target.value);
+  document.getElementById('cine-name').onchange=e=>cineRename(e.target.value);
   document.getElementById('ed-bp').onclick=openBlueprint;
   document.getElementById('bp-close').onclick=closeBlueprint;
   document.getElementById('bp-apply').onclick=()=>{
@@ -4877,12 +4981,155 @@ addEventListener('keydown',ev=>{
   fileIn.onchange=e=>{const f=e.target.files[0];if(!f)return;const fr=new FileReader();fr.onload=()=>loadLevelFromText(fr.result);fr.readAsText(f);fileIn.value='';};
 })();
 
+// ---------- Cinematics (Kamerafahrten) ----------
+const cine={on:false, keys:null, t:0, dur:0, onEnd:null, fromEditor:false};
+function findCam(name){return (currentLevel&&currentLevel.cams||[]).find(c=>c.name===name);}
+function camDuration(c){return (c&&c.keys||[]).reduce((a,k,i)=>a+(i===0?0:Math.max(0.05,k.dur||2)),0);}
+function playCinematic(name,onEnd){
+  const c=typeof name==='object'?name:findCam(name);
+  if(!c||!c.keys||!c.keys.length){if(onEnd)onEnd();return false;}
+  cine.on=true; cine.keys=c.keys; cine.t=0; cine.dur=camDuration(c);
+  cine.onEnd=onEnd||null; cine.fromEditor=editing;
+  document.getElementById('hud').classList.remove('active');
+  weaponGroup.visible=false;
+  document.getElementById('cinebars').classList.add('on');
+  try{document.exitPointerLock();}catch(e){}
+  return true;
+}
+// Position + Blickziel zum Zeitpunkt t (smoothstep pro Segment)
+function cineSample(t){
+  const ks=cine.keys;
+  if(ks.length===1){const k=ks[0];return {px:k.x,py:k.y,pz:k.z,lx:k.tx,ly:k.ty,lz:k.tz};}
+  let acc=0;
+  for(let i=1;i<ks.length;i++){
+    const d=Math.max(0.05,ks[i].dur||2);
+    if(t<=acc+d||i===ks.length-1){
+      let f=clamp((t-acc)/d,0,1); f=f*f*(3-2*f);
+      const a=ks[i-1],b=ks[i];
+      return {px:_lerp(a.x,b.x,f),py:_lerp(a.y,b.y,f),pz:_lerp(a.z,b.z,f),
+              lx:_lerp(a.tx,b.tx,f),ly:_lerp(a.ty,b.ty,f),lz:_lerp(a.tz,b.tz,f)};
+    }
+    acc+=d;
+  }
+}
+function updateCinematic(dt){
+  cine.t+=dt;
+  const s=cineSample(Math.min(cine.t,cine.dur));
+  camera.position.set(s.px,s.py,s.pz);
+  camera.lookAt(s.lx,s.ly,s.lz);
+  updateParticles(dt);
+  renderer.render(scene,camera);
+  if(cine.t>=cine.dur)endCinematic();
+}
+function endCinematic(){
+  if(!cine.on)return;
+  cine.on=false;
+  document.getElementById('cinebars').classList.remove('on');
+  const cb=cine.onEnd; cine.onEnd=null;
+  // im laufenden Match HUD wieder zeigen (Waffe stellt updatePlayer im nächsten Frame her)
+  if(running&&!cine.fromEditor&&!playerDead)document.getElementById('hud').classList.add('active');
+  if(cb)cb();
+}
+
+// ---------- Cinematics-Editor ----------
+const cineEd={cam:null, pick:null};
+function openCinematics(){
+  if(!currentLevel.cams)currentLevel.cams=[];
+  if(!cineEd.cam)cineEd.cam=currentLevel.cams[0]||null;
+  document.getElementById('cinematics').classList.remove('hidden');
+  cineRefreshSel(); cineRefreshKeys();
+}
+function closeCinematics(){
+  document.getElementById('cinematics').classList.add('hidden');
+  cineCancelPick();
+}
+function cineRefreshSel(){
+  const sel=document.getElementById('cine-sel');
+  const cams=currentLevel.cams||[];
+  sel.innerHTML=cams.map(c=>`<option ${cineEd.cam===c?'selected':''}>${c.name}</option>`).join('')||'<option>(keine)</option>';
+  document.getElementById('cine-name').value=cineEd.cam?cineEd.cam.name:'';
+}
+function cineSelectByName(name){
+  cineEd.cam=(currentLevel.cams||[]).find(c=>c.name===name)||null;
+  cineRefreshSel(); cineRefreshKeys();
+}
+function cineNew(){
+  const cams=currentLevel.cams||(currentLevel.cams=[]);
+  let n='cam'+(cams.length+1), i=1; while(cams.some(c=>c.name===n)){n='cam'+(++i);}
+  const c={name:n, keys:[{x:editCam.x,y:editCam.h*0.5,z:editCam.z+30, tx:editCam.x,ty:2,tz:editCam.z, dur:0}]};
+  cams.push(c); cineEd.cam=c; cineRefreshSel(); cineRefreshKeys();
+}
+function cineDelete(){
+  if(!cineEd.cam)return;
+  const cams=currentLevel.cams;
+  cams.splice(cams.indexOf(cineEd.cam),1);
+  cineEd.cam=cams[0]||null; cineRefreshSel(); cineRefreshKeys();
+}
+function cineRename(v){
+  if(!cineEd.cam||!v)return;
+  cineEd.cam.name=v.replace(/[^\w-]+/g,'_'); cineRefreshSel();
+}
+function cineAddKey(fromCam){
+  if(!cineEd.cam)return;
+  const ks=cineEd.cam.keys;
+  const k=fromCam
+    ? {x:editCam.x,y:editCam.h,z:editCam.z, tx:editCam.x,ty:0,tz:editCam.z, dur:ks.length?3:0}
+    : {x:0,y:20,z:0, tx:0,ty:2,tz:0, dur:ks.length?3:0};
+  ks.push(k); cineRefreshKeys();
+}
+function cineDelKey(i){ if(cineEd.cam){cineEd.cam.keys.splice(i,1);cineRefreshKeys();} }
+function cineRefreshKeys(){
+  const host=document.getElementById('cine-keys');
+  if(!cineEd.cam){host.innerHTML='<div class="ins-empty">Kein Cinematic. „+ Neu“ legt eins an.</div>';return;}
+  const num=(k,key)=>`<input type="number" step="1" data-ck="${key}" value="${cineEd.cam.keys[k][key]??0}">`;
+  host.innerHTML=cineEd.cam.keys.map((k,i)=>`<div class="cine-k" data-i="${i}">
+    <div class="cine-krow"><span class="cine-kl">#${i+1}</span>
+      <label>Dauer s ${i===0?'<i>(Start)</i>':num(i,'dur')}</label>
+      <button class="edbtn small cine-kdel">✕</button></div>
+    <div class="cine-krow"><span class="cine-kt">Pos</span>x${num(i,'x')}y${num(i,'y')}z${num(i,'z')}
+      <button class="edbtn small cine-pos">⌖ hier</button></div>
+    <div class="cine-krow"><span class="cine-kt">Ziel</span>x${num(i,'tx')}y${num(i,'ty')}z${num(i,'tz')}
+      <button class="edbtn small cine-look">👁 hier</button></div>
+  </div>`).join('');
+  host.querySelectorAll('.cine-k').forEach(div=>{
+    const i=+div.dataset.i;
+    div.querySelectorAll('[data-ck]').forEach(inp=>{inp.onchange=()=>{cineEd.cam.keys[i][inp.dataset.ck]=parseFloat(inp.value)||0;};});
+    div.querySelector('.cine-kdel').onclick=()=>cineDelKey(i);
+    div.querySelector('.cine-pos').onclick=()=>cineStartPick(i,'pos');
+    div.querySelector('.cine-look').onclick=()=>cineStartPick(i,'look');
+  });
+}
+// Punkt-auf-Karte wählen: Overlay ausblenden, nächster Map-Klick setzt x/z
+function cineStartPick(i,kind){
+  cineEd.pick={key:cineEd.cam.keys[i], kind};
+  document.getElementById('cinematics').classList.add('hidden');
+  document.getElementById('cine-pickhint').classList.remove('hidden');
+}
+function cineCommitPick(p){
+  if(!cineEd.pick)return;
+  const k=cineEd.pick.key;
+  if(cineEd.pick.kind==='pos'){k.x=Math.round(p.x);k.z=Math.round(p.z);}
+  else {k.tx=Math.round(p.x);k.tz=Math.round(p.z);}
+  cineCancelPick(); document.getElementById('cinematics').classList.remove('hidden'); cineRefreshKeys();
+}
+function cineCancelPick(){
+  cineEd.pick=null;
+  document.getElementById('cine-pickhint').classList.add('hidden');
+}
+function cinePreview(){
+  if(!cineEd.cam||!cineEd.cam.keys.length)return;
+  document.getElementById('cinematics').classList.add('hidden');
+  // nach der Vorschau das Overlay wieder zeigen
+  playCinematic(cineEd.cam, ()=>{document.getElementById('cinematics').classList.remove('hidden');});
+}
+
 // ---------- Loop ----------
 let last=performance.now();
 function loop(now){
   requestAnimationFrame(loop);
   let dt=(now-last)/1000;last=now;
   dt=Math.min(dt,0.05);
+  if(cine.on){updateCinematic(dt);return;}
   if(editing){
     updateEditor(dt);
     updateParticles(dt);
