@@ -342,6 +342,23 @@
   #powerups{position:fixed;top:74px;left:50%;transform:translateX(-50%);
     font-family:'Orbitron',sans-serif;font-size:14px;letter-spacing:2px;
     text-shadow:0 0 10px rgba(0,0,0,.7);pointer-events:none;}
+  /* Focus-/Bullet-Time-Balken */
+  #focusbar{position:fixed;left:28px;bottom:120px;width:160px;display:none;
+    font-family:'Orbitron',sans-serif;pointer-events:none;}
+  #focusbar.on{display:block;}
+  #focusbar .fb-l{font-size:10px;letter-spacing:2px;color:#00ffd0;}
+  #focusbar .fb-track{height:8px;background:rgba(0,255,208,.15);border:1px solid rgba(0,255,208,.5);margin-top:3px;}
+  #focusbar .fb-fill{height:100%;width:100%;background:#00ffd0;transition:width .1s;}
+  #focusbar.active .fb-fill{background:#fff;box-shadow:0 0 10px #00ffd0;}
+  /* Bullet-Time-Tint */
+  body.focus-on #hud::after{content:'';position:fixed;inset:0;pointer-events:none;
+    box-shadow:inset 0 0 220px rgba(0,255,208,.28);background:rgba(60,180,200,.05);}
+  /* Mutator-Checkboxen im Wizard */
+  .wz-muts{display:flex;flex-direction:column;gap:7px;}
+  .wz-mut{display:flex;align-items:flex-start;gap:9px;cursor:pointer;
+    font-family:'Share Tech Mono',monospace;font-size:13px;color:#cfe0ec;}
+  .wz-mut i{color:#6f879a;font-style:normal;font-size:11px;}
+  .wz-mut input{margin-top:3px;}
   #bigflash{position:fixed;inset:0;background:#fff;opacity:0;z-index:9;
     pointer-events:none;transition:opacity .25s;}
 
@@ -552,6 +569,7 @@
   <div id="hitmarker"></div>
   <div id="damage"></div>
   <div id="powerups"></div>
+  <div id="focusbar"><span class="fb-l">FOCUS</span><div class="fb-track"><div class="fb-fill"></div></div></div>
   <div id="teamscore"></div>
   <div id="objhud"></div>
 
@@ -663,7 +681,7 @@
     <input id="lvlName_legacy" value="ARENA Standard">
   </div>
 
-  <div id="buildtag">COA pre-alpha | build 0.51</div>
+  <div id="buildtag">COA pre-alpha | build 0.52</div>
 </div>
 
 <!-- ===== Untermenü-Screens (werden in den nächsten Etappen gefüllt) ===== -->
@@ -1286,6 +1304,7 @@ const player={
   yaw:Math.PI, pitch:0,
   onGround:true, health:100, armor:0,
   frags:0, deaths:0,
+  focus:100,                 // Focus-/Bullet-Time-Meter (Mutator)
   radius:0.6, height:1.7,
   name:'DU', team:'blue', isPlayer:true, alive:true,
   // Powerups (Restzeit in Sekunden)
@@ -1342,6 +1361,7 @@ const KEY_ACTIONS=[
   {id:'right',   label:'Rechts',       def:'KeyD'},
   {id:'jump',    label:'Springen',     def:'Space'},
   {id:'akimbo',  label:'Akimbo (Uzi)', def:'ShiftLeft'},
+  {id:'focus',   label:'Focus / Bullet-Time', def:'KeyQ'},
   {id:'hud',     label:'HUD wechseln', def:'KeyH'},
   {id:'fs',      label:'Vollbild',     def:'KeyF'},
   {id:'music',   label:'Musik an/aus', def:'KeyM'},
@@ -1405,6 +1425,16 @@ function applyRulesToPickups(){
     if(wk&&!weaponAllowed(wk)){p.active=false;p.group.visible=false;p.cd=1e9;}
   });
 }
+
+// ---------- Mutatoren ----------
+const mutators={focus:false, focusPickup:false, suddenDeath:false, knockout:false};
+let focusActive=false;        // Bullet-Time gerade aktiv
+let knockoutTimer=0;          // Countdown bis zum nächsten Knockout
+const FOCUS_MAX=100, FOCUS_DRAIN=28, FOCUS_RECHARGE=10;   // pro Sekunde
+const FOCUS_SCALE=0.35;       // Zeitlupe-Faktor für die Welt
+const SD_R=ARENA*0.66;        // Sudden-Death: außerhalb tödlich
+const KNOCKOUT_EVERY=25;      // Sekunden zwischen Knockouts
+let sdMarker=null;
 
 // Waffen-Viewmodel (einfaches Modell unten rechts an der Kamera)
 const weaponGroup=new THREE.Group();camera.add(weaponGroup);scene.add(camera);
@@ -2149,6 +2179,7 @@ function pickupColor(type,opts){
   if(type==='armor')return 0x3aa0ff;
   if(type==='ammo')return WEAPONS[opts.weapon].color;
   if(SUPER[type])return SUPER[type].color;
+  if(type==='focus')return 0x00ffd0;        // Focus-Pickup (Bullet-Time)
   if(type==='super')return 0xffaa00;        // Superwaffen-Spot
   return WEAPONS[type].color;               // Waffe
 }
@@ -2177,8 +2208,8 @@ function makePickup(type,x,z,respawn,opts){
     const strip=new THREE.Mesh(new THREE.BoxGeometry(0.58,0.13,0.78),
       new THREE.MeshStandardMaterial({color,emissive:color,emissiveIntensity:1.0}));
     core.add(box,strip);
-  }else if(isSuper||type==='super'){
-    // Powerups & Superwaffen-Spot: leuchtendes Icosaeder mit Halo
+  }else if(isSuper||type==='super'||type==='focus'){
+    // Powerups, Superwaffen-Spot & Focus: leuchtendes Icosaeder mit Halo
     core=new THREE.Mesh(new THREE.IcosahedronGeometry(0.6,0),
       new THREE.MeshStandardMaterial({color,emissive:color,emissiveIntensity:1.6,
         metalness:0.7,roughness:0.2}));
@@ -2649,6 +2680,7 @@ addEventListener('keydown',e=>{
   if(!e.repeat){
     const act=actionForCode(e.code);
     if(act==='akimbo')toggleAkimbo();
+    else if(act==='focus')toggleFocus();
     else if(act==='hud'){
       hudType=(hudType==='classic')?'tournament':(hudType==='tournament')?'arena':'classic';
       applyHudType();
@@ -2668,6 +2700,78 @@ function toggleAkimbo(){
   if(owned.uzi&&akimbo&&curWeap!=='uzi')switchWeapon('uzi');
   killfeed(akimbo?'<span class="you">AKIMBO AN</span>':'AKIMBO AUS');
   updateAmmo();updateTournamentBar();refreshViewmodel();
+}
+
+// ---------- Mutatoren-Runtime ----------
+function toggleFocus(){
+  if(!mutators.focus)return;
+  if(focusActive){focusActive=false;}
+  else if(player.focus>5){focusActive=true;blip(520,0.08,'sawtooth',0.12);}
+  document.body.classList.toggle('focus-on',focusActive);
+}
+function ensureSDMarker(){
+  if(sdMarker)return sdMarker;
+  sdMarker=new THREE.Group();
+  // roter Rahmen am tödlichen Rand
+  const mat=new THREE.MeshBasicMaterial({color:0xff2d55,transparent:true,opacity:0.16,side:THREE.DoubleSide});
+  const h=10;
+  [[0,SD_R,2*SD_R,1],[0,-SD_R,2*SD_R,1],[SD_R,0,1,2*SD_R],[-SD_R,0,1,2*SD_R]].forEach(([x,z,w,d])=>{
+    const wall=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat);
+    wall.position.set(x,h/2,z);sdMarker.add(wall);
+  });
+  scene.add(sdMarker);
+  return sdMarker;
+}
+function outsideSD(x,z){return Math.abs(x)>SD_R||Math.abs(z)>SD_R;}
+function updateMutators(dt){
+  // Focus-Meter
+  if(mutators.focus){
+    if(focusActive){
+      player.focus=Math.max(0,player.focus-FOCUS_DRAIN*dt);
+      if(player.focus<=0){focusActive=false;document.body.classList.remove('focus-on');}
+    }else{
+      player.focus=Math.min(FOCUS_MAX,player.focus+FOCUS_RECHARGE*dt);
+    }
+  }
+  // Sudden Death: außerhalb des Rings tödlich
+  if(mutators.suddenDeath){
+    ensureSDMarker().visible=true;
+    if(!playerDead&&outsideSD(player.pos.x,player.pos.z))damagePlayer(9999,null);
+    bots.forEach(b=>{if(b.alive&&outsideSD(b.pos.x,b.pos.z))damageBot(b,9999,null);});
+  }else if(sdMarker)sdMarker.visible=false;
+  // Knockout: in Intervallen den Schwächsten ausscheiden
+  if(mutators.knockout&&!gameOver){
+    knockoutTimer-=dt;
+    if(knockoutTimer<=0){knockoutTimer=KNOCKOUT_EVERY;doKnockout();}
+  }
+  updateFocusHud();
+}
+function doKnockout(){
+  const pool=combatants().filter(c=>c.isPlayer||!c.eliminated);
+  if(pool.length<=1)return;
+  let lo=pool[0];
+  for(const c of pool)if((c.frags||0)<(lo.frags||0))lo=c;
+  if(lo.isPlayer){
+    showBanner(`KNOCKOUT: ${playerName} ausgeschieden`);
+    endGame(false);return;
+  }
+  lo.eliminated=true;lo.alive=false;lo.group.visible=false;lo.respawnT=1e9;
+  showBanner(`KNOCKOUT: ${lo.name} ausgeschieden`);
+  blip(140,0.2,'square',0.16);
+  const left=combatants().filter(c=>c.isPlayer||!c.eliminated);
+  if(left.length<=1)endGame(left[0]===player);
+}
+function updateFocusHud(){
+  const el=document.getElementById('focusbar');if(!el)return;
+  if(!mutators.focus){el.classList.remove('on');return;}
+  el.classList.add('on');el.classList.toggle('active',focusActive);
+  el.querySelector('.fb-fill').style.width=player.focus+'%';
+}
+// Mutator-Pickups (Focus) zu Beginn einer Runde verteilen
+function spawnMutatorPickups(){
+  if(!mutators.focusPickup||isInstagib())return;
+  const spots=[[-30,0],[30,0],[0,-30],[0,30]];
+  spots.forEach(([x,z])=>makePickup('focus',x,z,16,{}));
 }
 
 addEventListener('mousemove',e=>{
@@ -3099,6 +3203,7 @@ function nearestEnemyOf(b){
 function updateBots(dt){
   const cfg=diffCfg();
   bots.forEach(b=>{
+    if(b.eliminated)return;            // Knockout: Bot ist raus
     if(!b.alive){
       // Respawn-Timer herunterzählen
       if(b.respawnT>0){b.respawnT-=dt;if(b.respawnT<=0)respawnBot(b);}
@@ -3318,6 +3423,9 @@ function updatePickups(dt){
       }else if(p.type==='overload'){
         player.overloadT=60;player.health=OVERLOAD_CAP;player.armor=OVERLOAD_CAP;taken=true;
         blip(220,0.3,'sine',0.18);killfeed(`<span class="you">+</span> OVERLOAD`);
+      }else if(p.type==='focus'){
+        player.focus=FOCUS_MAX;taken=true;blip(520,0.2,'sawtooth',0.16);
+        killfeed(`<span class="you">+</span> FOCUS`);
       }else if(p.type==='super'){
         // zufällig eine der beiden Superwaffen vergeben
         const w=Math.random()<0.5?'redeemer':'ion';
@@ -3715,7 +3823,12 @@ function resetGame(){
   applyRulesToPickups();         // nicht erlaubte Waffen-/Munitions-Pickups ausblenden
   const mission=scriptActive();
   applyBotCount(mission?0:botCount);   // in einer Mission spawnt das Skript die Gegner
-  bots.forEach(b=>{b.frags=0;b.deaths=0;});
+  bots.forEach(b=>{b.frags=0;b.deaths=0;b.eliminated=false;});
+  // Mutatoren zurücksetzen
+  player.focus=FOCUS_MAX;focusActive=false;document.body.classList.remove('focus-on');
+  knockoutTimer=KNOCKOUT_EVERY;
+  if(sdMarker)sdMarker.visible=false;
+  spawnMutatorPickups();
   assignTeams();                 // Teams je nach Modus
   respawnPlayer();
   if(!mission)bots.forEach(respawnBot);
@@ -3911,10 +4024,20 @@ function wizOpts(){
   }
   return html;
 }
+const MUT_DEFS=[
+  ['focus','Focus / Bullet-Time','Taste Q verlangsamt die Welt (Meter verbraucht sich).'],
+  ['focusPickup','Focus-Pickups','Focus-Kristalle erscheinen in der Arena.'],
+  ['suddenDeath','Sudden Death','Der äußere Rand der Arena ist tödlich.'],
+  ['knockout','Knockout','Alle 25 s scheidet der Schwächste aus.'],
+];
 function wizMut(){
+  const muts=MUT_DEFS.map(m=>
+    `<label class="wz-mut"><input type="checkbox" data-mut="${m[0]}" ${mutators[m[0]]?'checked':''}>
+      <span><b>${m[1]}</b><br><i>${m[2]}</i></span></label>`).join('');
   return optGroupHtml('hud','HUD-Typ',[['classic','Classic'],['tournament','Tournament'],['arena','Arena']],hudType)
     +optGroupHtml('rules','Regelsatz',RULESETS.map((r,i)=>[i,r.name]),selectedRulesIndex)
-    +`<div class="wz-hint">Regelsatz legt Start-Health/Armor und Waffen-Freischaltung fest – eigene unter „Customize“. HUD-Darstellung wählbar.</div>`;
+    +`<div class="wz-opt"><span class="wz-opt-l">Mutatoren</span><div class="wz-muts">${muts}</div></div>`
+    +`<div class="wz-hint">Regelsatz legt Start-Health/Armor und Waffen-Freischaltung fest – eigene unter „Customize“. Mutatoren verändern die Spielregeln.</div>`;
 }
 function wizMap(){
   return `<div class="wz-list">${MAPS.map((m,i)=>
@@ -3947,6 +4070,7 @@ function wireWizard(){
     else wizStart();
   };
   // interaktive Elemente je Schritt
+  wiz.host.querySelectorAll('[data-mut]').forEach(cb=>cb.onchange=()=>{mutators[cb.dataset.mut]=cb.checked;});
   wiz.host.querySelectorAll('.wz-pick[data-mode]').forEach(b=>b.onclick=()=>{wiz.mode=b.dataset.mode;renderWizard();});
   wiz.host.querySelectorAll('.wz-pick[data-mi]').forEach(b=>b.onclick=()=>{wiz.missionIndex=+b.dataset.mi;renderWizard();});
   wiz.host.querySelectorAll('.wz-pick[data-map]').forEach(b=>b.onclick=()=>{selectedMapIndex=+b.dataset.map;renderWizard();});
@@ -5288,10 +5412,12 @@ function loop(now){
       updatePlayer(dt);
       if(ion.active)updateIon(dt);
     }
+    const wdt=focusActive?dt*FOCUS_SCALE:dt;   // Bullet-Time verlangsamt die Welt, nicht den Spieler
     updatePowerups(dt);
-    updateBots(dt);
-    updateDoors(dt);
-    updateRockets(dt);
+    updateMutators(dt);
+    updateBots(wdt);
+    updateDoors(wdt);
+    updateRockets(wdt);
     updatePickups(dt);
     if(scriptActive()&&!playerDead){updateZones();updateScriptClock(dt);}
     if(isObjectiveMode())updateObjectives(dt);
