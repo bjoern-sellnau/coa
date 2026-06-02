@@ -580,6 +580,7 @@
     <div style="color:#46596b;font-size:24px;">/</div>
     <div><span class="frag deaths" id="deaths">0</span><div class="cap">TODE</div></div>
     <div style="margin-left:10px;"><span class="cap">LIMIT</span><br><span style="color:#cfe0ec;font-size:18px;font-family:'Orbitron';" id="limit">25</span></div>
+    <div style="margin-left:10px;" id="rtimer-wrap"><span class="cap">ZEIT</span><br><span style="color:#cfe0ec;font-size:18px;font-family:'Orbitron';" id="rtimer">–</span></div>
   </div>
 
   <div class="panel" id="health-panel">
@@ -681,7 +682,7 @@
     <input id="lvlName_legacy" value="ARENA Standard">
   </div>
 
-  <div id="buildtag">COA pre-alpha | build 0.52</div>
+  <div id="buildtag">COA pre-alpha | build 0.53</div>
 </div>
 
 <!-- ===== Untermenü-Screens (werden in den nächsten Etappen gefüllt) ===== -->
@@ -1319,6 +1320,8 @@ const AIR_ACCEL=2.4;
 const FRICTION=7;
 let FRAG_LIMIT=25;          // Einzel-Limit (Match / Deathmatch) — im Match-Dialog einstellbar
 let TEAM_LIMIT=75;          // Team-Limit (Team Deathmatch)
+let roundLimit=0;           // Zeitlimit in Sekunden (0 = aus)
+let roundClock=0;           // verbleibende Zeit
 const MAX_HEALTH=100, MAX_ARMOR=100;
 const OVERLOAD_CAP=500;     // Health/Armor-Obergrenze während Overload/Berserk
 let playerName='PLAYER';    // Spielername (Leaderboard)
@@ -1638,6 +1641,21 @@ function checkWin(){
     for(const c of combatants()){
       if(c.frags>=FRAG_LIMIT){endGame(c===player);return;}
     }
+  }
+}
+// Zeitlimit abgelaufen: Sieger nach Punktestand
+function endByTime(){
+  if(gameOver)return;
+  showBanner('ZEIT ABGELAUFEN');
+  if(scriptActive()){endGame(false);return;}   // Mission nicht rechtzeitig geschafft
+  const other=player.team==='blue'?'red':'blue';
+  if(isObjectiveMode()){
+    endGame((objScore[player.team]||0)>=(objScore[other]||0));
+  }else if(isTeamMode()){
+    endGame(teamScore(player.team)>=teamScore(other));
+  }else{
+    let lead=player;combatants().forEach(c=>{if((c.frags||0)>(lead.frags||0))lead=c;});
+    endGame(lead===player);
   }
 }
 
@@ -3580,6 +3598,13 @@ function updateHUD(){
   document.getElementById('armor-val').textContent=Math.ceil(player.armor);
   document.getElementById('frags').textContent=player.frags;
   document.getElementById('deaths').textContent=player.deaths;
+  // Round-Timer
+  const rtw=document.getElementById('rtimer-wrap');
+  if(roundLimit>0){rtw.style.display='';
+    const rt=document.getElementById('rtimer');
+    rt.textContent=fmtTime(Math.max(0,roundClock));
+    rt.style.color=roundClock<30?'#ff2d55':'#cfe0ec';
+  }else rtw.style.display='none';
   // Limit / Teamstand
   const teamScoreEl=document.getElementById('teamscore');
   if(isObjectiveMode()){
@@ -3827,6 +3852,7 @@ function resetGame(){
   // Mutatoren zurücksetzen
   player.focus=FOCUS_MAX;focusActive=false;document.body.classList.remove('focus-on');
   knockoutTimer=KNOCKOUT_EVERY;
+  roundClock=roundLimit;
   if(sdMarker)sdMarker.visible=false;
   spawnMutatorPickups();
   assignTeams();                 // Teams je nach Modus
@@ -4022,6 +4048,7 @@ function wizOpts(){
   }else{
     html+=optGroupHtml('frag','Ziel (Frags)',[[10,'10'],[15,'15'],[25,'25'],[50,'50']],FRAG_LIMIT);
   }
+  html+=optGroupHtml('round','Zeitlimit',[[0,'Aus'],[180,'3 min'],[300,'5 min'],[600,'10 min']],roundLimit);
   return html;
 }
 const MUT_DEFS=[
@@ -4094,6 +4121,7 @@ function applyOptGroup(id,v){
     else if(wiz.mode==='tdm'||wiz.mode==='instagib_team')TEAM_LIMIT=n;
     else FRAG_LIMIT=n;
   }
+  else if(id==='round')roundLimit=parseInt(v,10);
   blip(520,0.04,'sine',0.08);
 }
 function wizCommitStep(){
@@ -5415,6 +5443,7 @@ function loop(now){
     const wdt=focusActive?dt*FOCUS_SCALE:dt;   // Bullet-Time verlangsamt die Welt, nicht den Spieler
     updatePowerups(dt);
     updateMutators(dt);
+    if(roundLimit>0&&!gameOver){roundClock-=dt;if(roundClock<=0){roundClock=0;endByTime();}}
     updateBots(wdt);
     updateDoors(wdt);
     updateRockets(wdt);
